@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import joblib
 import plotly.express as px
+from sklearn.metrics import classification_report, confusion_matrix
 
 # โหลดโมเดล Machine Learning
 svm_air_quality_model = joblib.load('air_quality_svm_model.pkl')
@@ -17,7 +18,7 @@ fruit_label_encoder = joblib.load('fruit_label_encoder.pkl')
 st.title("Machine Learning & Neural Network Web Application")
 
 # เมนูนำทาง
-menu = ["Project Overview", "Air Quality Prediction (ML)", "Fruit Classification (NN)", "Batch Prediction"]
+menu = ["Project Overview", "Air Quality Prediction (ML)", "Fruit Classification (NN)", "Batch Prediction", "Model Evaluation"]
 choice = st.sidebar.selectbox("Select Page", menu)
 
 # หน้าสำหรับอธิบายโปรเจกต์
@@ -28,6 +29,7 @@ if choice == "Project Overview":
         1. **Machine Learning Model (SVM)** for Air Quality Prediction.
         2. **Neural Network Model (MLPClassifier)** for Fruit Classification.
         3. **Batch Prediction** for uploading CSV files.
+        4. **Model Evaluation** for assessing model performance.
     """)
 
 # ฟังก์ชันสำหรับ input แบบทั้งกรอกและเลื่อนค่าได้
@@ -77,6 +79,11 @@ if choice == "Air Quality Prediction (ML)":
             fig_comparison = px.line(comparison_df, x='Factors', y=['Your Input', 'Good Standard'], markers=True, title='Air Quality Factors Comparison')
             st.plotly_chart(fig_comparison)
 
+            # บันทึกผลลัพธ์เป็นไฟล์ CSV
+            output_df = pd.DataFrame({'PM2.5': [pm25], 'PM10': [pm10], 'Temperature': [temp], 'Humidity': [humidity], 'Wind Speed': [wind_speed], 'Predicted Air Quality': [quality[prediction]]})
+            csv = output_df.to_csv(index=False).encode('utf-8')
+            st.download_button("Download Prediction Results", data=csv, file_name='air_quality_prediction.csv', mime='text/csv')
+
 # หน้าสำหรับจำแนกผลไม้ด้วย Neural Network
 if choice == "Fruit Classification (NN)":
     st.header("Fruit Classification (Neural Network)")
@@ -109,6 +116,11 @@ if choice == "Fruit Classification (NN)":
             fig_fruit = px.bar(prob_df_fruit, x='Fruit Type', y='Probability', color='Fruit Type', title='Prediction Confidence')
             st.plotly_chart(fig_fruit)
 
+            # บันทึกผลลัพธ์เป็นไฟล์ CSV
+            output_df_fruit = pd.DataFrame({'Weight': [weight], 'Length': [length], 'Circumference': [circumference], 'Color': [color], 'Predicted Fruit Type': [fruit_name]})
+            csv_fruit = output_df_fruit.to_csv(index=False).encode('utf-8')
+            st.download_button("Download Classification Results", data=csv_fruit, file_name='fruit_classification.csv', mime='text/csv')
+
 # ฟังก์ชันสำหรับอัพโหลดและทำนายแบบแบทช์
 if choice == "Batch Prediction":
     st.header("Batch Prediction with CSV Upload")
@@ -127,6 +139,10 @@ if choice == "Batch Prediction":
             st.write("Predicted Results:")
             st.table(df)
 
+            # บันทึกผลลัพธ์เป็นไฟล์ CSV
+            csv_batch_air_quality = df.to_csv(index=False).encode('utf-8')
+            st.download_button("Download Batch Prediction Results", data=csv_batch_air_quality, file_name='batch_air_quality_predictions.csv', mime='text/csv')
+
         elif 'Weight' in df.columns and 'Length' in df.columns and 'Circumference' in df.columns and 'Color' in df.columns:
             st.write("Performing Fruit Classification...")
             input_data = fruit_scaler.transform(df[['Weight', 'Length', 'Circumference', 'Color']])
@@ -135,5 +151,45 @@ if choice == "Batch Prediction":
             st.write("Predicted Results:")
             st.table(df)
 
+            # บันทึกผลลัพธ์เป็นไฟล์ CSV
+            csv_batch_fruit = df.to_csv(index=False).encode('utf-8')
+            st.download_button("Download Batch Classification Results", data=csv_batch_fruit, file_name='batch_fruit_classifications.csv', mime='text/csv')
+
         else:
             st.error("The uploaded file does not have the required columns for prediction.")
+
+# หน้าสำหรับประเมินผลโมเดล
+if choice == "Model Evaluation":
+    st.header("Model Evaluation")
+
+    # อัปโหลดไฟล์สำหรับประเมินผลโมเดล
+    uploaded_file_eval = st.file_uploader("Upload CSV for Model Evaluation", type=["csv"])
+    if uploaded_file_eval is not None:
+        df_eval = pd.read_csv(uploaded_file_eval)
+        st.write("Uploaded Data for Evaluation:")
+        st.dataframe(df_eval)
+
+        if 'PM2.5' in df_eval.columns and 'PM10' in df_eval.columns and 'Temperature' in df_eval.columns and 'Humidity' in df_eval.columns and 'Wind_Speed' in df_eval.columns and 'Actual_Air_Quality' in df_eval.columns:
+            st.write("Evaluating Air Quality Prediction Model...")
+            input_data = air_quality_scaler.transform(df_eval[['PM2.5', 'PM10', 'Temperature', 'Humidity', 'Wind_Speed']])
+            predictions = svm_air_quality_model.predict(input_data)
+            report = classification_report(df_eval['Actual_Air_Quality'], predictions, output_dict=True)
+            st.write(pd.DataFrame(report).transpose())
+
+            conf_matrix = confusion_matrix(df_eval['Actual_Air_Quality'], predictions)
+            st.write("Confusion Matrix:")
+            st.write(conf_matrix)
+
+        elif 'Weight' in df_eval.columns and 'Length' in df_eval.columns and 'Circumference' in df_eval.columns and 'Color' in df_eval.columns and 'Actual_Fruit_Type' in df_eval.columns:
+            st.write("Evaluating Fruit Classification Model...")
+            input_data = fruit_scaler.transform(df_eval[['Weight', 'Length', 'Circumference', 'Color']])
+            predictions = mlp_fruit_model.predict(input_data)
+            report = classification_report(fruit_label_encoder.transform(df_eval['Actual_Fruit_Type']), predictions, output_dict=True)
+            st.write(pd.DataFrame(report).transpose())
+
+            conf_matrix = confusion_matrix(fruit_label_encoder.transform(df_eval['Actual_Fruit_Type']), predictions)
+            st.write("Confusion Matrix:")
+            st.write(conf_matrix)
+
+        else:
+            st.error("The uploaded file does not have the required columns for evaluation.")
